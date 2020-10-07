@@ -1,0 +1,9 @@
+{
+  "iname": "elu-mixup",
+  "dataset": "fashion",
+  "init": 2,
+  "nBlocks": [9, 9, 9],
+  "noActnorm": true,
+  "nonlin": "elu",
+  "inj_pad": 0
+}

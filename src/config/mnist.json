@@ -1,0 +1,9 @@
+{
+  "iname": "elu-mixup",
+  "dataset": "mnist",
+  "init": 2,
+  "nBlocks": [7, 7, 7],
+  "noActnorm": true,
+  "nonlin": "elu",
+  "inj_pad": 0
+}
