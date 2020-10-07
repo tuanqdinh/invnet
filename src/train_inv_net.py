@@ -95,7 +95,7 @@ for epoch in range(init_epoch + 1, init_epoch + 1 + args.epochs):
 		targets = Variable(targets).cuda()
 		super_targets = Variable(torch.tensor(super_targets, dtype=torch.long)).cuda()
 
-		if args.mixup:
+		if args.mixup or args.mixup_hidden:
 			logits, z, reweighted_targets = inet(inputs, targets=targets, mixup_hidden=args.mixup_hidden, mixup=args.mixup, mixup_alpha=args.mixup_alpha)
 			super_reweighted_targets = convert_to_super(reweighted_targets)
 			fine_loss = bce_loss(softmax(logits[0]), reweighted_targets)
