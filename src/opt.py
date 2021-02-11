@@ -1,5 +1,5 @@
 """
-	@author Tuan Dinh tuandinh@cs.wisc.edu
+	@author xxx xxx@cs.xxx.edu
 	@date 08/14/2019
 """
 
@@ -70,7 +70,7 @@ parser.add_argument('--reduction', type=str, default='mean', help='reduction')
 parser.add_argument('--cuda', action='store_true', help='use cuda?')
 parser.add_argument('--threads', type=int, default=4, help='number of threads for data loader to use')
 parser.add_argument('--seed', type=int, default=123, help='random seed to use. Default=123')
-
+parser.add_argument('--bottleneck_mult', default=4, type=int, help='bottleneck multiplier')
 ###-------------- inet ----------------####
 # architectures
 # --nBlocks 7 7 7 --nStrides 1 2 2 --nChannels 32 64 128 --coeff 0.9 --batch 128 --init_ds 1 --inj_pad 0 --powerIterSpectralNorm 5 --nonlin elu --optimizer sgd --vis_server localhost  --vis_port 8097
@@ -78,7 +78,7 @@ parser.add_argument('--seed', type=int, default=123, help='random seed to use. D
 parser.add_argument('--nClasses', nargs='+', type=int, default=10)
 parser.add_argument('--nBlocks', nargs='+', type=int, default=[7, 7, 7])
 parser.add_argument('--nStrides', nargs='+', type=int, default=[1, 2, 2])
-parser.add_argument('--nChannels', nargs='+', type=int, default=[32, 64, 128])
+parser.add_argument('--nChannels', nargs='+', type=int, default=[2, 8, 32])
 parser.add_argument('--inj_pad', default=0, type=int, help='initial inj padding')
 parser.add_argument('--coeff', default=0.9, type=float, help='contraction coefficient for linear layers')
 

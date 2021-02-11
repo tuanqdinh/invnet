@@ -32,7 +32,6 @@ lambda_distill=50
 
 # nohup sh scripts/distill_net.sh  > ../results/logs/fnet_distill_fashion_mixup_4.txt &
 # alias tf='tail -n 100 ../results/logs/fnet_distill_fashion_mixup_4.txt'
-#36217
 ####================= Cifar10 ###=================
 # dataset="cifar10"
 # init=1

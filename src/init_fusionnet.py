@@ -1,5 +1,5 @@
 """
-	@author Tuan Dinh tuandinh@cs.wisc.edu
+	@author xxx xxx@cs.xxx.edu
 	@date 02/14/2020
 """
 import os, sys
@@ -23,7 +23,7 @@ cudnn.benchmark = True
 torch.cuda.manual_seed(args.seed)
 device = torch.device("cuda:0")
 
-args.inet_name = "inet-" + args.iname
+args.inet_name = args.iname
 args.fnet_name = "fnet-{}-{}-{}".format(args.fname, args.iname, args.nactors)
 
 checkpoint_dir = os.path.join(args.save_dir, 'checkpoints')

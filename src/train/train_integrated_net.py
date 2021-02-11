@@ -1,5 +1,5 @@
 """
-	@author Tuan Dinh tuandinh@cs.wisc.edu
+	@author xxx xxx@cs.xxx.edu
 	@date 08/14/2019
 """
 

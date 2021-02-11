@@ -203,26 +203,15 @@ class Processor():
 
 		return np.asarray([acc, acc_g, match_g])
 
-	def batch_score(self, z_missed, z_missed_g, target_missed):
-		# classification
-		map_targets = [0, 0, 1, 1, 1, 1, 1, 1, 0, 0]
-		super_targets = np.asarray([map_targets[x] for x in target_missed])
-		super_targets = Variable(torch.tensor(super_targets, dtype=torch.long)).cuda()
-
+	def batch_score(self, z_missed, z_missed_g, targets):
 		out_missed_g = self.inet.module.classifier(z_missed_g)
 		out_missed = self.inet.module.classifier(z_missed)
-
 		# evaluation 1
 		scores = [0, 0]
-		for k in range(2):
-			if k == 0:
-				targets = target_missed
-			else:
-				targets = super_targets
-			_, y = torch.max(out_missed[k].data, 1)
-			_, y_g = torch.max(out_missed_g[k].data, 1)
-
-			scores[k] = y_g.eq(targets.data).sum().cpu().item()
+		_, y = torch.max(out_missed.data, 1)
+		_, y_g = torch.max(out_missed_g.data, 1)
+		scores[0] = y.eq(targets.data).sum().cpu().item()
+		scores[1] = y_g.eq(targets.data).sum().cpu().item()
 
 		return np.asarray(scores)
 
@@ -235,8 +224,6 @@ class iTester():
 		self.dataloader = dataloader
 		self.nactors = nactors
 		self.in_shapes = in_shapes
-		# criterionMSE = nn.MSELoss(reduction='mean')
-		# criterionL1 = torch.nn.L1Loss(reduction='mean')
 		self.criterionCE = nn.CrossEntropyLoss()
 		self.processor = Processor(self.inet, nactors, fuse_type)
 		if not(inet == None):
@@ -247,7 +234,6 @@ class iTester():
 		self.inet.eval()
 
 	def evaluate(self, net=None):
-		map_targets = [0, 0, 1, 1, 1, 1, 1, 1, 0, 0]
 		if net == None:
 			net = self.inet
 		net.eval()
@@ -259,26 +245,22 @@ class iTester():
 		for _, (inputs, targets) in enumerate(self.dataloader):
 			# print(batch_idx)
 			targets = Variable(targets).cuda()
-			super_targets = np.asarray([map_targets[x] for x in targets])
-			super_targets = Variable(torch.tensor(super_targets, dtype=torch.long)).cuda()
 			inputs = Variable(inputs).cuda()
 			logits, _, _ = net(inputs)
-			fine_loss = self.criterionCE(logits[0], targets)
-			super_loss = self.criterionCE(logits[1], super_targets)
-			prec1 = Helper.accuracy(logits[0], targets, topk=(1,))
-			prec5 = Helper.accuracy(logits[1], super_targets, topk=(1,))
-			loss = fine_loss + super_loss
+			loss = self.criterionCE(logits, targets)
+			prec1, prec5 = Helper.accuracy(logits, targets, topk=(1,5))
 
 			losses.update(loss.item(), inputs.size(0))
-			top1.update(prec1[0].item(), inputs.size(0))
-			top5.update(prec5[0].item(), inputs.size(0))
+			top1.update(prec1.item(), inputs.size(0))
+			top5.update(prec5.item(), inputs.size(0))
 
 		return losses.avg, top1.avg, top5.avg
 
 	def eval_inv(self):
 		print('Evaluate Invertibility on ', self.iname)
 		# loss
-		corrects = np.zeros(3) # correct-x, correct-x-hat, match
+		ticks = time.time()
+		corrects = np.zeros(2) # correct-x, correct-x-hat, match
 		total = 0
 		for batch_idx, (inputs, labels) in enumerate(self.dataloader):
 			inputs, labels = self.processor.process_data(inputs, labels)
@@ -292,10 +274,23 @@ class iTester():
 			corrects += corr
 
 			total += z.shape[0]
+
+			if batch_idx == 0:
+				_, z, _ = self.inet(inputs)
+				x_inversed = self.inet.module.inverse(z)
+				x_inversed_missed = self.inet.module.inverse(z_missed)
+				x_inversed_missed_hat = self.inet.module.inverse(z_missed_hat)
+
+				Helper.save_images(x_inversed, '../results/samples/', 'revnet', 'inversed', 0)
+				Helper.save_images(x_inversed_missed, '../results/samples/', 'revnet', 'missed', 0)
+				Helper.save_images(x_inversed_missed_hat, '../results/samples/', 'revnet', 'missed_hat', 0)
+				Helper.save_images(x_fused, '../results/samples/', 'revnet', 'fused', 0)
+				print("x: {:.4f}".format(torch.norm(x_inversed_missed_hat - x_inversed_missed)))
+				print("z: {:.4f}".format(torch.norm(z_missed - z_missed_hat)))
 			del z, z_missed, z_rest, target_missed, x_fused, z_fused_hat, z_missed_hat
 
 		corrects = 100 * corrects / total
-		print('\t Correctly classified: X {:.4f} X_hat {:.4f} Match {:.4f}'.format(corrects[0], corrects[1], corrects[2]))
+		print('\t Correctly classified: X {:.4f} X_hat {:.4f}'.format(corrects[0], corrects[1]))
 		return corrects[0]
 
 	def plot_fused(self, sample_dir, dataloader=None):
@@ -318,7 +313,6 @@ class iTester():
 	def sample_fused(self, out_path, dataloader=None, niters=1):
 		if dataloader==None:
 			dataloader = self.dataloader
-
 		images = None
 		targets = None
 		first = True
@@ -329,28 +323,26 @@ class iTester():
 				z = self.processor.process_latent(inputs, labels, missed=False)
 				z_fused = self.processor.fuse(z)
 				x_fused = self.inet.module.inverse(z_fused)
-
 				M = inputs.shape[0] // self.nactors
 				inputs = inputs.view(M, self.nactors, inputs.shape[1], inputs.shape[2], inputs.shape[3])
 				labels = labels.view(M, self.nactors)
-
 				data = torch.cat([inputs, x_fused.unsqueeze(1)], dim=1)
-
+				data = data.data.cpu().numpy()
+				labels = labels.data.cpu().numpy()
 				if first:
 					first = False
 					images = data
 					targets = labels
 				else:
-					images = torch.cat([images, data], dim=0)
-					targets = torch.cat([targets, labels], dim=0)
-
-				del data, z, z_fused, x_fused, inputs, labels
+					images = np.concatenate((images, data), axis=0)
+					targets = np.concatenate((targets, labels), axis=0)
 
 		img_dict = {
-			'images': images.cpu().numpy(),
-			'labels': targets.cpu().numpy()
+			'images': images,
+			'labels': targets
 			}
 		np.save(out_path, img_dict)
+
 		print('Done')
 
 	def plot_latent(self, num_classes):
@@ -375,8 +367,9 @@ class iTester():
 	###===================== Fusion Tester =====================####
 	def evaluate_fgan(self, fnet):
 		# loss
-		corrects = np.zeros(2) # correct-x, correct-x-hat, match
-		total = 0
+		fi_time = []
+		fusion_time = []
+		g_time = []
 		for batch_idx, (inputs, labels) in enumerate(self.dataloader):
 			inputs, labels = self.processor.process_data(inputs, labels)
 			z, z_missed, z_rest, target_missed = self.processor.process_latent(inputs, labels, missed=True)
@@ -386,13 +379,58 @@ class iTester():
 			_, C, D, W = inputs.shape
 			inputs = inputs.view(M, self.nactors, C, D, W)
 			x_g = inputs.view(M, self.nactors*C, D, W)
+			fusion_start = time.time()
 			x_fused_hat = fnet(x_g)
+			fusion_time.append(time.time() - fusion_start)
 			############
 
+			fi_start = time.time()
 			_, z_fused_hat, _ = self.inet(x_fused_hat)
+			fi_time.append(time.time() - fi_start)
 			z_missed_hat = self.processor.reconstruct(z_fused_hat, z_rest)
 
+			g_start = time.time()
 			corr = self.processor.batch_score(z_missed, z_missed_hat, target_missed)
+			g_time.append(time.time() - g_start)
+
+		g_time = np.asarray(g_time)*1000
+		fi_time = np.asarray(fi_time)*1000
+		fusion_time = np.asarray(fusion_time)*1000
+		print('Score: ', corr)
+		print(self.iname, self.nactors)
+		print('Gi: {:.3} {:.3}'.format(np.median(g_time), g_time.std()))
+		print('Fi: {:.3} {:.3}'.format(np.median(fi_time), fi_time.std()))
+		print('Fu: {:.3} {:.3}'.format(np.median(fusion_time), fusion_time.std()))
+
+	def evaluate_fgan2(self, fnet):
+		# loss
+		corrects = np.zeros(2) # correct-x, correct-x-hat, match
+		total = 0
+		fi_time = []
+		fusion_time = []
+		g_time = []
+		for batch_idx, (inputs, labels) in enumerate(self.dataloader):
+			inputs, labels = self.processor.process_data(inputs, labels)
+			z, z_missed, z_rest, target_missed = self.processor.process_latent(inputs, labels, missed=True)
+
+			#### difference
+			M = inputs.shape[0] // self.nactors
+			_, C, D, W = inputs.shape
+			inputs = inputs.view(M, self.nactors, C, D, W)
+			x_g = inputs.view(M, self.nactors*C, D, W)
+			fusion_start = time.time()
+			x_fused_hat = fnet(x_g)
+			fusion_time.append(time.time() - fusion_start)
+			############
+
+			fi_start = time.time()
+			_, z_fused_hat, _ = self.inet(x_fused_hat)
+			fi_time.append(time.time() - fi_start)
+			z_missed_hat = self.processor.reconstruct(z_fused_hat, z_rest)
+
+			g_start = time.time()
+			corr = self.processor.batch_score(z_missed, z_missed_hat, target_missed)
+			g_time.append(time.time() - g_start)
 			corrects += corr
 
 			total += z.shape[0]
@@ -409,8 +447,9 @@ class iTester():
 
 		#### difference
 		M = inputs.shape[0] // self.nactors
-		input_g = inputs.view(M, self.nactors, self.in_shapes[1], self.in_shapes[2], self.in_shapes[3])
-		input_g = input_g.view(M, self.nactors*self.in_shapes[1], self.in_shapes[2], self.in_shapes[3])
+		N, C, D, W = inputs.shape
+		input_g = inputs.view(M, self.nactors, C, D, W)
+		input_g = input_g.view(M, self.nactors*C, D, W)
 		x_fused_g = fnet(input_g)
 		############
 
@@ -418,10 +457,11 @@ class iTester():
 		z_missed_g = self.processor.reconstruct(z_fused_g, z_rest)
 
 		# inverse
+		self.inet.eval()
 		z_fused = self.processor.fuse(z)
-		x_fused = inet.module.inverse(z_fused)
-		x_missed_g = inet.module.inverse(z_missed_g)
-		x_missed = inet.module.inverse(z_missed)
+		x_fused = self.inet.module.inverse(z_fused)
+		x_missed_g = self.inet.module.inverse(z_missed_g)
+		x_missed = self.inet.module.inverse(z_missed)
 
 		# visualize
 		Helper.save_images(x_fused_g, sample_dir, fname, 'x_fused_g', 0)

@@ -7,12 +7,13 @@ def downsample_shape(shape):
     return (shape[0] * 4, shape[1] // 2, shape[2] // 2)
 
 def mixup_process(out, target_reweighted, lam):
-	indices = np.random.permutation(out.size(0))
-	out = out*lam + out[indices]*(1-lam)
+	indices = np.random.permutation(out[0].size(0))
 	target_shuffled_onehot = target_reweighted[indices]
 	target_reweighted = target_reweighted * lam + target_shuffled_onehot * (1 - lam)
+	a = out[0]*lam + out[0][indices]*(1-lam)
+	b = out[1]*lam + out[1][indices]*(1-lam)
 
-	return out, target_reweighted
+	return (a, b), target_reweighted
 
 def mixup_data(x, y, alpha):
 	'''Compute the mixup data. Return mixed inputs, pairs of targets, and lambda'''

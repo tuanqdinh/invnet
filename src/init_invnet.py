@@ -1,5 +1,5 @@
 """
-	@author Tuan Dinh tuandinh@cs.wisc.edu
+	@author xxx xxx@cs.xxx.edu
 	@date 02/14/2020
 """
 
@@ -12,14 +12,15 @@ from torch.autograd import Variable
 from torch.optim import lr_scheduler
 
 import numpy as np
-import visdom, os, sys, time, pdb, random, json
+import os, sys, time, pdb, random, json
+# visdom
 
 from utils.helper import Helper, AverageMeter
 from utils.plotter import Plotter
 from utils.tester import iTester
 from utils.provider import Provider
 from opt import args
-from invnet.iresnet import conv_iResNet as iResNet
+from invnet.iRevNet import iRevNet as iResNet
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -52,7 +53,7 @@ else:
 	actname = "act"
 
 args.iname = "{}-{}-{}-{}".format(args.dataset, args.nBlocks[0], mixname, actname)
-args.inet_name = "inet-" + args.iname
+args.inet_name = "revnet-" + args.iname
 args.fnet_name = "fnet-{}-{}-{}".format(args.fname, args.iname, args.nactors)
 
 
@@ -67,14 +68,18 @@ Helper.try_make_dir(args.fnet_save_dir)
 Helper.try_make_dir(args.inet_save_dir)
 
 ########### DATA #################
+def get_loader(data):
+	return torch.utils.data.DataLoader(data, batch_size=args.batch_size, shuffle=True, num_workers=2, drop_last=True)
+
 traindata, testset, in_shape = Provider.load_data(args.dataset, args.data_dir)
 nsamples = len(traindata)
 train_size = int(nsamples * TRAIN_FRACTION)
 val_size = nsamples - train_size
 trainset, valset = torch.utils.data.random_split(traindata, [train_size, val_size])
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=2, drop_last=True)
-valloader = torch.utils.data.DataLoader(valset, batch_size=args.batch_size, shuffle=False, num_workers=2)
-testloader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=2)
+
+trainloader = get_loader(trainset)
+valloader = get_loader(valset)
+testloader = get_loader(testset)
 
 if args.dataset == 'cifar10':
 	args.input_nc = 3
@@ -97,6 +102,7 @@ criterionKLD = nn.KLDivLoss()
 ########## # Evaluation ####################
 def analyse(args, model, in_shapes, trainloader, testloader, fuse_type=None):
 
+	model.eval()
 	tester = iTester(model, args.inet_name, in_shapes, testloader, args.nactors, fuse_type=fuse_type)
 
 	if args.evaluate:
@@ -118,12 +124,12 @@ def analyse(args, model, in_shapes, trainloader, testloader, fuse_type=None):
 		fusion_data_dir = os.path.join(args.data_dir, "fusion/{}-{}".format(args.iname, args.nactors))
 		Helper.try_make_dir(fusion_data_dir)
 
-		train_path = os.path.join(fusion_data_dir, 'train.npy')
-		test_path = os.path.join(fusion_data_dir, 'test.npy')
-		val_path = os.path.join(fusion_data_dir, 'val.npy')
+		train_path = os.path.join(fusion_data_dir, 'train')
+		test_path = os.path.join(fusion_data_dir, 'test')
+		val_path = os.path.join(fusion_data_dir, 'val')
 
 		print("Generating train set")
-		tester.sample_fused(train_path, trainloader, niters=4)
+		tester.sample_fused(train_path, trainloader, niters=5)
 		print("Generating test set")
 		tester.sample_fused(test_path, testloader)
 		print("Generating validation set")
@@ -132,12 +138,10 @@ def analyse(args, model, in_shapes, trainloader, testloader, fuse_type=None):
 
 	if args.eval_fusion:
 		from fusionnet.pix2pix import Pix2PixModel as FModel
-
 		# if args.fname == 'pix2pix':
 			# from fusionnet.pix2pix import Pix2PixModel as FModel
 		# else:
 			# from fusionnet.unet import UnetModel as FModel
-
 		args.gpu_ids = [0]
 		args.isTrain = False
 		fmodel = FModel(args)
@@ -146,63 +150,11 @@ def analyse(args, model, in_shapes, trainloader, testloader, fuse_type=None):
 
 		fnet = fmodel.netG
 		fnet.eval()
-		tester.evaluate_fgan(fnet)
+		tester.evaluate_fgan2(fnet)
 
 		# sample_path = os.path.join(args.save_dir, 'samples')
 		# tester.plot_reconstruction(fnet, args.fnet_name, sample_path)
 
-		return True
-
-	if args.eval_distill:
-		from fusionnet.networks import define_G
-		args.gpu_ids = [0]
-
-		fnet = define_G(args.input_nc, args.output_nc, args.ngf, args.netG, args.norm, not args.no_dropout, args.init_type, args.init_gain, args.gpu_ids, nactors=args.nactors)
-
-		save_filename = '%s_net.pth' % (args.resume_g)
-		fnet_path = os.path.join(args.fnet_save_dir, save_filename)
-		fnet.load_state_dict(torch.load(fnet_path))
-		print("-- Loading checkpoint '{}'".format(fnet_path))
-
-		fnet.eval()
-		tester.evaluate_fgan(fnet)
-		return True
-
-	if args.test_latent:
-		# from torch.utils.data.sampler import SubsetRandomSampler
-		labels = testset.targets
-		indices = np.argwhere(np.asarray(labels) == 1)
-		indices = indices.reshape(len(indices))
-
-		set = torch.utils.data.Subset(testset, indices)
-		dataloader = torch.utils.data.DataLoader(set, batch_size=args.batch_size, shuffle=False, num_workers=2)
-
-		sample_path = os.path.join(args.save_dir, 'samples')
-		tester.plot_fused(sample_path, dataloader)
-		return True
-
-	if args.plotTnse:
-		num_classes = 7
-		labels = trainset.targets
-		indices = np.argwhere(np.asarray(labels) < num_classes)
-		indices = indices.reshape(len(indices))
-		trainset = torch.utils.data.Subset(trainset, indices)
-		trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=False, num_workers=2)
-		Tester.plot_latent(model, trainloader, num_classes)
-		return True
-
-	if args.analysisTraceEst:
-		Tester.anaylse_trace_estimation(model, testset, use_cuda, args.extension)
-		return True
-
-	if args.norm == 'True':
-		svs = Tester.test_spec_norm(model, in_shapes, args.extension)
-		svs = svs[0]
-		print(np.min(svs), np.median(svs), np.max(svs))
-		return True
-
-	if args.interpolate:
-		Tester.interpolate(model, testloader, testset, start_epoch, use_cuda, best_objective, args.dataset)
 		return True
 
 	return False

@@ -1,6 +1,6 @@
 """
     Code for "Invertible Residual Networks"
-    @author: Tuan Dinh
+    @author: xxx
     Edit from @
 """
 

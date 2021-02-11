@@ -1,10 +1,10 @@
 """
-	@author Tuan Dinh tuandinh@cs.wisc.edu
+	@author xxx xxx@cs.xxx.edu
 	@date 02/14/2020
 """
 from init_fusionnet import *
-from torch.utils.tensorboard import SummaryWriter
-writer = SummaryWriter('../results/runs/sleepnet')
+# from torch.utils.tensorboard import SummaryWriter
+# writer = SummaryWriter('../results/runs/sleepnet')
 
 if args.concat_input:
 	ninputs = 1

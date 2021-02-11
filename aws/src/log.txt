@@ -1,0 +1,16 @@
+INFO:root:Worker 2  Done
+Files already downloaded and verified
+I am worker: 2 in all 2 workers
+
+ == Building iResNet 64 == 
+INFO:root:Worker 1  Done
+Files already downloaded and verified
+I am worker: 1 in all 2 workers
+
+ == Building iResNet 64 == 
+INFO:root:PS Done
+Files already downloaded and verified
+
+ == Building iResNet 64 == 
+I am the master: the world size is 3
+Done sending messages to workers!

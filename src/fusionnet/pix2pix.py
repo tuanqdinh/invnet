@@ -1,7 +1,13 @@
 import torch
 from .base_model import BaseModel
 from . import networks
+import torch.nn.functional as F
 
+def loss_hinge_dis(dis_out_real, dis_out_fake):
+    return torch.mean(F.relu(1. - dis_out_real)) + torch.mean(F.relu(1. + dis_out_fake))
+
+def loss_hinge_gen(gen_out_fake):
+    return -torch.mean(gen_out_fake)
 
 class Pix2PixModel(BaseModel):
     """ This class implements the pix2pix model, for learning a mapping from input images to output images given paired data.
@@ -85,6 +91,7 @@ class Pix2PixModel(BaseModel):
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         self.fake_B = self.netG(self.real_A)  # G(A)
+    
 
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""
@@ -98,6 +105,7 @@ class Pix2PixModel(BaseModel):
         self.loss_D_real = self.criterionGAN(pred_real, True)
         # combine loss and calculate gradients
         self.loss_D = (self.loss_D_fake + self.loss_D_real) * 0.5
+        # self.loss_D = loss_hinge_dis(pred_real, pred_fake)
         self.loss_D.backward()
 
     def backward_G(self):
@@ -106,11 +114,12 @@ class Pix2PixModel(BaseModel):
         fake_AB = torch.cat((self.real_A, self.fake_B), 1)
         pred_fake = self.netD(fake_AB)
         self.loss_G_GAN = self.criterionGAN(pred_fake, True)
+        # self.loss_G_GAN = loss_hinge_gen(pred_fake)
         # Second, G(A) = B
-        self.loss_logcosh = torch.log(torch.cosh(self.fake_B - self.real_B)).mean()
+        # self.loss_logcosh = torch.log(torch.cosh(self.fake_B - self.real_B)).mean()
 
-        # self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
-        self.loss_G_L1 = self.loss_logcosh * self.opt.lambda_L1
+        self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
+        # self.loss_G_L1 = self.loss_logcosh * self.opt.lambda_L1
         # combine loss and calculate gradients
         self.loss_G = self.loss_G_GAN + self.loss_G_L1
         self.loss_G.backward()

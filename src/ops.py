@@ -2,7 +2,7 @@ import torch, os
 import numpy as np
 import torch.nn.functional as F
 import torch.nn as nn
-from invnet.iresnet import conv_iResNet as iResNet
+from codednet.invnet.iRevNet import iRevNet as iResNet
 from utils.provider import Provider
 from utils.helper import Helper
 from torch.utils.data import DataLoader
@@ -13,52 +13,27 @@ softmax = nn.Softmax(dim=1)
 criterionKLD = nn.KLDivLoss()
 
 def load_networks(net, resume, net_save_dir):
-	if resume == 0:
-		save_filename = 'current_net.pth'
-	elif resume == 1:
-		save_filename = 'best_net.pth'
-	else:
-		save_filename = '%s_net.pth' % (resume)
+	save_filename = '%s_net.pth' % (resume)
 	net_path = os.path.join(net_save_dir, save_filename)
-
 	init_epoch = 0
 	if os.path.isfile(net_path):
 		print("-- Loading checkpoint '{}'".format(net_path))
-
 		state = torch.load(net_path)
-		# net.load_state_dict(state)
 		net.load_state_dict(state['model'])
-		# init_epoch = state['epoch']
 		return True, net
 	else:
 		print("--- No checkpoint found at '{}'".format(net_path))
 		return False, None
 
 def load_inet(args, device):
-	# iResNet data
-	trainset, testset, in_shape = Provider.load_data(args.dataset, args.data_dir)
-	trainloader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=2)
-	# testloader = DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=2)
-	inet = iResNet(nBlocks=args.nBlocks,
-					nStrides=args.nStrides,
-					nChannels=args.nChannels,
-					nClasses=args.nClasses,
-					init_ds=args.init_ds,
-					inj_pad=args.inj_pad,
-					in_shape=in_shape,
-					coeff=args.coeff,
-					numTraceSamples=args.numTraceSamples,
-					numSeriesTerms=args.numSeriesTerms,
-					n_power_iter = args.powerIterSpectralNorm,
-					density_estimation=args.densityEstimation,
-					actnorm=(not args.noActnorm),
-					learn_prior=(not args.fixedPrior),
-					nonlin=args.nonlin).to(device)
-	init_batch = Helper.get_init_batch(trainloader, args.init_batch)
-	print("initializing actnorm parameters...")
-	with torch.no_grad():
-		inet(init_batch.to(device), ignore_logdet=True)
-	print("initialized")
+	in_shape=(1, 32, 32)
+	args.nChannels = [2, 8, 32]
+	args.bottleneck_mult = 1
+	args.init_ds = 2
+	inet = iResNet(nBlocks=args.nBlocks, nStrides=args.nStrides,
+					nChannels=args.nChannels, nClasses=10,
+					init_ds=args.init_ds, dropout_rate=0.1, affineBN=True,
+					in_shape=in_shape, mult=args.bottleneck_mult).to(device)
 	inet = torch.nn.DataParallel(inet, range(torch.cuda.device_count()))
 
 	if args.resume > 0:
@@ -69,8 +44,10 @@ def load_inet(args, device):
 
 def evaluate_unet(data_loader, fnet, inet, criterion, device):
 	lossf = []
-	corrects = [0, 0]
+	corrects = 0
 	total = 0
+	inet.eval()
+	fnet.netG.eval()
 	for _, (images, targets) in enumerate(data_loader):
 		inputs = images.to(device)
 		targets = targets.to(device)
@@ -92,14 +69,53 @@ def evaluate_unet(data_loader, fnet, inet, criterion, device):
 
 		out_hat = inet.module.classifier(z_hat)
 		out = inet.module.classifier(z_0)
-		for k in range(2):
-			_, y = torch.max(out[k].data, 1)
-			_, y_hat = torch.max(out_hat[k].data, 1)
-			correct = y_hat.eq(y.data).sum().cpu().numpy()
-			corrects[k] += correct
-		total += N
+		_, y = torch.max(out.data, 1)
+		_, y_hat = torch.max(out_hat.data, 1)
+		correct = y_hat.eq(y.data).sum().cpu().numpy()
+		corrects += correct / N
+		total += 1
 
-	return np.mean(lossf), np.asarray(corrects) / total
+	return np.mean(lossf), corrects/total
+
+def evaluate_unet_robustness(data_loader, fnet, inet, criterion, device):
+	lossf = []
+	corrects = 0
+	total = 0
+	inet.eval()
+	fnet.netG.eval()
+	for _, (images, targets) in enumerate(data_loader):
+		inputs = images.to(device)
+		targets = targets.to(device)
+		N, A, C, H, W = inputs.shape
+		# inputs = inputs[:, torch.randperm(A), ...]
+		fake = fnet.netG(inputs.view(N, C*A, H, W))
+		loss_l1 = criterion(fake, targets)
+		lossf.append(loss_l1.data.cpu().numpy())
+
+		# Classification evaluation
+		with torch.no_grad():
+			# z_c: 2048
+			(_, z_c), _ = inet(inputs.view(N * A, C, H, W), with_latent=True)
+
+		z_c = z_c.view(N, A, 2048)
+		z_0 = z_c[:, 0, ...]
+		z_c = z_c[:, 1:, ...].sum(dim=1)
+		# img_fused = atanh(fake)
+		img_fused = fake # no tanh
+		(_, z_fused), _ = inet(img_fused, with_latent=True)
+		z_hat = A * z_fused - z_c
+
+		out_hat = inet.classify(z_hat)
+
+		out = inet.classify(z_0)
+
+		_, y = torch.max(out.data, 1)
+		_, y_hat = torch.max(out_hat.data, 1)
+		correct = y_hat.eq(y.data).sum().cpu().numpy()
+		corrects += correct / N
+		total += 1
+
+	return np.mean(lossf), corrects/total
 
 
 def evaluate_dnet(data_loader, fnet, inet, device, nactors, nClasses):
