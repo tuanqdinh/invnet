@@ -1,0 +1,114 @@
+{
+    "data_processing":{ 
+        "dataset": "imagenet",
+        "nClasses": 10,
+        "in_shape": [3, 224, 224]
+    },
+
+    "name":{
+        "iname": "irevnet",
+        "fname": "pix2pix"
+    },
+
+    "train": {
+        "model": {
+            "nactors": 2,
+            "reduction": "mean",
+            "bottleneck_mult": 1
+        },
+        "inet":{
+            "mixup_alpha": 1,
+            "mixup": false,
+            "mixup_hidden": true,
+            "nBlocks": [11, 11, 11],
+            "nStrides": [2, 2, 2],
+            "nChannels": [2, 8, 32],
+            "inj_pad": 0,
+            "coeff": 0.9,
+            "multiScale": false,
+            "fixedPrior": false,
+            "noActnorm": false,
+            "nonlin": "elu",
+            "init_batch": 1024,
+            "init_ds": 2
+        },
+
+        "fnet": {
+            "gan_mode": "lsgan",
+            "model": "cycle_gan",
+            "netD": "basic",
+            "netG": "unet_128",
+            "n_layers_D": 5,
+            "init_type": "normal",
+            "init_gain": 0.02,
+            "lambda_L1": 100,
+            "input_nc": 3,
+            "output_nc": 3,
+            "ngf": 64,
+            "ndf": 64
+        },
+
+        "training_setting":{
+            "test_batch_size": 1,
+            "epochs": 200,
+            "n_epochs": 200,
+            "log_steps": 50,
+            "save_steps": 10,
+
+            "no_dropout": false,
+            "dataset_mode": "aligned",
+            "direction": "AtoB",
+            "serial_batches": false,
+            "num_threads": 4,
+            "load_size": 286,
+            "crop_size": 256,
+            "max_dataset_size": 10000,
+            "preprocess": "resize_and_crop",
+            "no_flip": false,
+            "display_winsize": 256,
+            "epoch": "latest",
+            "verbose": false,
+            "continue_train": false,
+            "phase": "train",
+            "pool_size": 0,
+
+            "warmup_epochs": 10,
+            "eps": 0.01,
+            "norm": "batch",
+            "numTraceSamples": 1,
+            "numSeriesTerms": 1,
+            "powerIterSpectralNorm": 1
+        },
+
+        "optimization": {
+            "optimizer": "Adam",
+            "weight_decay": 0.0005,
+            "drop_rate": 0.1,
+            "drop_two": false,
+            "nesterov": false,
+            "beta1": 0.5,
+            "niter_decay": 50,
+            "lr_policy": "cosine",
+            "lr_decay_iters": 50,
+            "epoch_count": 1,
+            "n_epochs_decay": 60
+        },
+
+        "initialization":{
+            "cuda": false,
+            "threads": 4,
+            "seed": 123,
+            "gpu_ids": "0,",
+            "vis_port": 8097,
+            "vis_server": "localhost",
+            "log_every": 10,
+            "log_verbose": false,
+            "deterministic": false,
+            "extension": ".npy"
+        },
+        "loss_function": {
+            "combined_loss": false,
+            "concat_input": false
+        }
+    }
+}

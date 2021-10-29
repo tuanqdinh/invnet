@@ -28,6 +28,12 @@ class Helper:
 	#### ==== Network Printout ==== ######
 	# Calculate the gradient norm of parameters of model
 	@staticmethod
+	def log(logf, msg, console_print=True):
+		logf.write(msg + '\n')
+		if console_print:
+			print(msg)
+			
+	@staticmethod
 	def get_grad_norm(model):
 		return [torch.norm(p.grad).cpu().numpy().item() for p in model.parameters()]
 
@@ -114,17 +120,17 @@ class Helper:
 		Parameters:
 			epoch (int) -- current epoch; used in the file name '%s_net_%s.pth' % (epoch, name)
 		"""
-		save_filename = '%s_net.pth' % (epoch)
-		save_path = os.path.join(save_dir, save_filename)
+		# save_filename = 'current_net.pth' #% (epoch)
+		# save_path = os.path.join(save_dir, save_filename)
 		state = {
 			'model': net.state_dict(),
 			'loss': [val_loss, train_loss],
 			'accuracy': [val_acc1, train_acc1],
-			'opt': args,
+			# 'opt': args,
 			'epoch': epoch
 		}
-		torch.save(state, save_path)
-		print('\nSave model ', save_filename)
+		# torch.save(state, save_path)
+		# print('\nSave model ', save_filename)
 
 		torch.save(state, os.path.join(save_dir, 'current_net.pth'))
 		if is_best:

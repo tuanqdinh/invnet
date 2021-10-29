@@ -1,17 +1,16 @@
+* Training
+# 1. Train invertible network
 
+python ./main.py --config_file configs/mnist.json
 
-nactors=$1
+# 2. Generate fusion dataset 
 
-fname="pix2pix"
-iname="mnist-7-mixhidden-act"
-dataset="mnist"
-init=2
-resume=100 #151
+python ./main.py --config_file configs/mnist.json -fusion --nactors 2 -sample_fusion 
 
-# python ./train_inv_net.py --config_file config/mnist.json --nactors $nactors --resume $resume --batch_size 512 --mixup_hidden --sample_fused
+# 3. Train fusion network
 
-resume_g=0
-# python ./train_fusion_gan_net.py --fname $fname --iname $iname --dataset $dataset --nactors $nactors --resume_g $resume_g --init_ds $init --epochs 50 --lr 0.002 --log_steps 200
+python ./main.py --config_file configs/mnist.json -fusion --nactors 2 
 
-resume_g=50
-python ./test_fusion_gan_net.py --fname $fname --iname $iname --dataset $dataset --nactors $nactors --resume_g $resume_g --resume $resume --init_ds $init --mixup_hidden --flag_test
+# 4. Evaluate the fusion network
+
+python ./main.py --config_file configs/mnist.json -fusion --nactors 2 -test_fusion

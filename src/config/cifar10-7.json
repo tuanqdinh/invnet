@@ -1,8 +1,0 @@
-{
-  "dataset": "cifar10",
-  "init": 1,
-  "nBlocks": [7, 7, 7],
-  "noActnorm": false,
-  "nonlin": "elu",
-  "inj_pad": 0
-}
